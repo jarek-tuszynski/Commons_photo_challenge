@@ -80,6 +80,7 @@ def revise_voting_page(wiki_text: str, file_name: str):
     ''' Alter Voting page after voting ends '''
     cstr = "{{Collapse top|Current votes – please choose your own winners before looking}}"
     with open(file_name, "w", encoding="utf-8") as fp:
+        fp.write('{{Discussion top}}')
         for line in wiki_text.splitlines():
             if line.startswith("<!-- '''Creator"):
                 line = line.replace("<!-- ", "").replace(" -->", "").replace(cstr, '')
@@ -88,6 +89,8 @@ def revise_voting_page(wiki_text: str, file_name: str):
             elif line.startswith("'''Voting will end"):
                 line = line.replace("Voting will end", "Voting ended")
             fp.write(line+'\n')
+            
+        fp.write('{{Discussion bottom}}')
 
 #=====================================================================================
 def validate_voters(site, vote_df, challenge):
@@ -172,13 +175,13 @@ def validate_votes(vote_df, voter_df):
 
 #=====================================================================================
 def list_errors(vote_df, voter_df, challenge):
-    errors = ['=== Issues corrected by the software ===']
+    errors = ['=== Issues corrected by the [[Commons:Photo challenge/code/count voting.py|software]] ===']
     
     # Report user based issues
     df = voter_df.sort_values(by="error", ascending=True)
     df = df[df['error']>0]
     for _, row in df.iterrows():
-        user = f'* ({row['error']}) [[User:{row['voter']}]] '
+        user = f'* [[User:{row['voter']}]] '
         match row['error']:
             case 1: # Report IP adresses
                 user  = f'* ({row['error']}) [[Special:Contributions/{row['voter']}|{row['voter']}]] '
@@ -205,11 +208,11 @@ def list_errors(vote_df, voter_df, challenge):
         image = f'[[Commons:Photo challenge/{challenge}/Voting#{n}|Image #{n}]]'
         match row['error']:
             case 5: # user voting for the same image twice
-                error = f'* ({row['error']}) [[User:{row['voter']}]] voted more than once for {image} 🡆 subsequent votes were not counted'
+                error = f'* [[User:{row['voter']}]] voted more than once for {image} 🡆 subsequent votes were not counted'
             case 6:  # Report unsigned votes
-                error = f'* ({row['error']}) Unsigned vote for {image} was detected 🡆 it was not counted (line was: "{row['line']}")'
+                error = f'* Unsigned vote for {image} was detected 🡆 it was not counted (line was: "{row['line']}")'
             case 7: # Report self voting
-                error = f'* ({row['error']}) {user} voted for their own {image} 🡆 their vote was not counted'
+                error = f'* {user} voted for their own {image} 🡆 their vote was not counted'
             case _:
                 continue
         errors.append(error)        
@@ -250,7 +253,7 @@ def list_errors(vote_df, voter_df, challenge):
     return errors
 
 #=====================================================================================
-def registration(user)
+def registration(user):
    link = f'[https://commons.wikimedia.org/wiki/Special:Log?type=newusers&user={user}|registered]'
    return f'<span class="plainlinks">{link}</span>'
 
@@ -432,7 +435,7 @@ def process_challenge(challenge: str):
 def main():
     #process_challenge('2025 - August - Test')
     #process_challenge('2025 - July - Waterside structures')
-    process_challenge('2025 - August - Bark')
+    process_challenge('2025 - August - Home interiors')
     return
     header, challenge_list = get_challenges()
     n = len(challenge_list)
