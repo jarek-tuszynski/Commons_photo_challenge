@@ -1,3 +1,10 @@
+'''
+    Purpose:  Code to create voting pages for Wikimedia Commons Photo Challenge
+    Author:   Jarek Tuszynski [[User:Jarekt]], 2025
+    Based on: C# code by [[user:Colin]] (https://commons.wikimedia.org/wiki/Commons:Photo_challenge/code/CreateVoting.cs)
+    License:  Public domain
+'''
+
 import pywikibot
 import re
 import datetime
@@ -9,6 +16,8 @@ import os
 
 #=====================================================================================
 def get_challenges() -> list:
+    ''' Parse [[Commons:Photo challenge/Submitting]] to get names of photo challenges this month
+    '''
     site = pywikibot.Site("commons", "commons")  # Wikimedia Commons
     page = pywikibot.Page(site, "Commons:Photo challenge/Submitting")
     text = page.get()  # full wikitext
@@ -18,6 +27,8 @@ def get_challenges() -> list:
 
 #=====================================================================================
 def get_file_list(wiki_text: str):
+    ''' Parse submition pages of individual challenges to get list of submitted files
+    '''
     files = []
     seeking_gallery = True
     challenge_name = ''
@@ -58,14 +69,16 @@ def get_file_list(wiki_text: str):
                 continue
             files.append([fname, title])
             
-    df = pd.DataFrame(files, columns=['file_name', 'title'])
-    return df, challenge_name
+    file_df = pd.DataFrame(files, columns=['file_name', 'title'])
+    return file_df, challenge_name
 
 #=====================================================================================
-def get_file_info(site, df, error_fp):
+def get_file_info(site, file_df, error_fp):
+    ''' For each file look up basic info
+    '''
     for col in ['user', 'uploaded', 'width', 'height','comment']:
-        df[col] = None
-    for irow, row in df.iterrows():
+        file_df[col] = None
+    for irow, row in file_df.iterrows():
         file_name = row['file_name'].replace(" ", "_")
         file_page = pywikibot.FilePage(site, file_name)
         if not file_page.exists():
@@ -75,25 +88,27 @@ def get_file_info(site, df, error_fp):
         text = file_page.get().lower()
         own_work = ('own work' in meta['comment']) or ('{{own}}' in text)  or ('{{sf}}' in text)
         own_work = own_work or ('{{own photo}}' in text)  or ('{{self-photographed}}' in text)
-        df.loc[irow, 'user']     = meta['user']
-        df.loc[irow, 'uploaded'] = meta['timestamp']
-        df.loc[irow, 'width']    = meta['width']
-        df.loc[irow, 'height']   = meta['height']
-        df.loc[irow, 'comment']  = meta['comment'] 
-        df.loc[irow, 'own_work'] = own_work 
+        file_df.loc[irow, 'user']     = meta['user']
+        file_df.loc[irow, 'uploaded'] = meta['timestamp']
+        file_df.loc[irow, 'width']    = meta['width']
+        file_df.loc[irow, 'height']   = meta['height']
+        file_df.loc[irow, 'comment']  = meta['comment'] 
+        file_df.loc[irow, 'own_work'] = own_work 
         if not own_work:
             error_fp.write(f'[[File:{file_name}]] might not be own work\n')
             continue
         
-    return df
+    return file_df
 
 #=====================================================================================
-def create_vote_page(file_name, df, error_fp, theme, min_upload_date):
+def create_vote_page(file_name, file_df, error_fp, theme, min_upload_date):
+    ''' Create text of the voting page
+    '''
     max_upload_date = min_upload_date + datetime.timedelta(days=30, hours=12)
     close_time      = max_upload_date - datetime.timedelta(days=1)
     vote_close_time = max_upload_date + datetime.timedelta(days=30)
     size_px = 240000
-    collapse_text = '{{{{Collapse top|Current votes – please choose your own winners before looking}}}}\n'
+    collapse_text = '{{Collapse top|Current votes – please choose your own winners before looking}}\n'
     errors = []
 
     print('min_upload_date', min_upload_date)
@@ -111,22 +126,25 @@ def create_vote_page(file_name, df, error_fp, theme, min_upload_date):
         fp.write("{{Commons:Photo challenge/Voting header/{{SuperFallback|Commons:Photo challenge/Voting header}}}}\n")
         fp.write("{{Commons:Photo challenge/Voting example}}\n\n")
 
-        for _, file in df.iterrows():
+        for _, file in file_df.iterrows():
             user  = f'[[User:{file['user']}|{file['user']}]]'
             date  = file['uploaded']
             fname = file['file_name']
             date_str = date.strftime("%d %B %Y")
             error = ''
             if date and date < min_upload_date:
-                error = f"REMOVED: {fname} by {user} was uploaded {date_str} before the challenge opened {min_upload_str}.")
-                continue
+                error = f"REMOVED: [[:File:{fname}]] by {user} was uploaded {date_str} before the challenge opened {min_upload_str}."
+
             if date and date >= max_upload_date:
-                error = f"REMOVED: {fname} by {user} was uploaded {date_str} after the challenge closed {max_upload_str}.")
-                continue
+                error = f"REMOVED: [[:File:{fname}]] by {user} was uploaded {date_str} after the challenge closed {max_upload_str}."
+
             if not file['active']:
-                error = f"REMOVED: [[file:{fname}]] by {user} , since the user uploded more than allowed 4 entries.")
-                continue
+                error = f"REMOVED: [[:File:{fname}]] by {user}, since the user uploded more than allowed 4 entries."
+                
             if len(error)>0:
+                errors.append(error)
+                continue
+                
             w     = file['width'] 
             h     = file['height']
             thumb_width  = int(math.sqrt(size_px * w / h))
@@ -144,8 +162,17 @@ def create_vote_page(file_name, df, error_fp, theme, min_upload_date):
             fp.write("{{Collapse bottom}}\n\n")
             ifile += 1
 
+        if len(errors)>0:
+            fp.write(('=== Issues corrected by the [[Commons:Photo challenge/code/create voting.py|software]] ===\n'))
+            
+        for error in errors:
+            fp.write("* " + error + "\n")     
+
+
 #=====================================================================================
 def process_challenge(challenge: str):
+    ''' Process a single challenge: parse submision page and create voting page
+    '''
     # Parse challenge string for dates
     parts    = challenge.split(" - ")
     theme    = parts[2] 
@@ -186,7 +213,8 @@ def process_challenge(challenge: str):
 
 #=====================================================================================
 def main():
-    challenge_list = get_challenges()
+    #challenge_list = get_challenges()
+    challenge_list = ['2025 - September - Bricks','2025 - September - Gold']
     n = len(challenge_list)
     challenge_name = [""] * n
     for i in range(n):
