@@ -146,7 +146,8 @@ def create_voting_page(challenge: str, file_df):
         fp.write("{{Commons:Photo challenge/Voting header/{{SuperFallback|Commons:Photo challenge/Voting header}}}}\n")
         fp.write("{{Commons:Photo challenge/Voting example}}\n\n")
 
-        for ifile, file in file_df.iterrows():
+        ifile = 0
+        for _, file in file_df.iterrows():
             user  = f'[[User:{file['user']}|{file['user']}]]'
             date  = file['uploaded']
             fname = file['file_name']
@@ -170,9 +171,10 @@ def create_voting_page(challenge: str, file_df):
                 errors.append(error)
                 continue
                 
-            w     = file['width'] 
-            h     = file['height']
-            thumb_width  = int(math.sqrt(size_px * w / h))
+            w = file['width'] 
+            h = file['height']
+            ifile += 1
+            thumb_width = int(math.sqrt(size_px * w / h))
             user_text = f"<!-- '''Creator:''' {user} --> "
             date_text = f"'''Uploaded:''' {date_str} "
             size_text = "'''Size''': {} × {} ({} MP) ".format(w, h, w*h/1e6)
@@ -281,7 +283,8 @@ def parse_voting_page(wiki_text: str):
 
         # Section marker === ... ===
         if line.startswith("==="):
-            num   = substr(r"===(\d*)\.", line)
+            #num   = substr(r"===(\d*)\.", line)  #===<span class="anchor" id="2">2</span>
+            num   = substr(r'<span[^>]*>(\d+)</span>', line)  #===<span class="anchor" id="2">2</span>
             fname = ''
             title = ''
             creator = ''
@@ -664,7 +667,10 @@ def talk_to_winners(challenge: str):
         talk_page.text += f"\n\n== {header} ==\n{text}--~~~~"
         talk_page.save(summary="Announcing Photo Challenge winners")
         
+#=====================================================================================
+def announce_challenge_winners(challenge: str):
     # text to be added to announcments
+    year, month, theme = challenge.split(" - ")
     header = f"[[Commons:Photo challenge|Photo challenge]] {month} results"
     text1  = f"{{{{Commons:Photo challenge/{challenge}/Winners}}}}" 
     text2  = "Congratulations to [[User:{}|]], [[User:{}|]] and [[User:{}|]]. ".format(
