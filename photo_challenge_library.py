@@ -231,9 +231,8 @@ def create_voting_page_from_submission_page(challenge: str):
 def get_new_text_of_voting_index(challenge_list: list):
     # Create new text for [[Commons:Photo challenge/Voting]]
     site  = pywikibot.Site("commons", "commons")  # Wikimedia Commons
-    part  = challenge_list[0].split(" - ")
-    year  = part[0]
-    month = datetime.datetime.strptime(part[1], "%B").strftime("%m")
+    year, month, theme = challenge.split(" - ")
+    month  = datetime.datetime.strptime(month, "%B").strftime("%m")
     header = f'=== {{{{ucfirst:{{{{ISOdate|{year}-{month}|{{{{PAGELANGUAGE}}}}}}}}}}}} ==='
     print(header)
     for challenge in challenge_list:
@@ -269,7 +268,7 @@ def get_voting_challenges(page_name = "Commons:Photo challenge/Voting"):
     text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
     header = substr(r"(===\s+.+\s+===)", text)
     challenge_list = re.findall(r"Commons:Photo challenge/([^/]+)/Voting", text)
-    return header, challenge_list
+    return challenge_list
 
 #=====================================================================================
 def parse_voting_page(wiki_text: str):
@@ -468,7 +467,7 @@ def validate_votes(vote_df, voter_df):
 
 #=====================================================================================
 def list_errors(vote_df, voter_df, challenge):
-    errors = ['=== Issues corrected by the [[Commons:Photo challenge/code/count voting.py|software]] ===']
+    errors = ['=== Issues corrected by the [[Commons:Photo challenge/code/Photo challenge library.py|software]] ===']
     
     # Report user based issues
     df = voter_df.sort_values(by="error", ascending=True)
@@ -653,8 +652,6 @@ def talk_to_winners(challenge: str):
             continue
         fname   = file_df.iloc[i]["file_name"]
         page_title = 'User:' + file_df.iloc[i]["creator"]
-        #page_title = 'User:JarektBot'
-        #page_title = f"Add to [[User talk:{}]] talk page:\n".format(file_df.iloc[i]["creator"]))
         header = f"[[Commons:Photo challenge/{challenge}/Winners]]"
         text   = "{{{{Photo Challenge {}|File:{}|{}|{}|{}}}}}".format(
                   color[rank], fname, theme, year, month)
@@ -668,41 +665,79 @@ def talk_to_winners(challenge: str):
         talk_page.save(summary="Announcing Photo Challenge winners")
         
 #=====================================================================================
-def announce_challenge_winners(challenge: str):
-    # text to be added to announcments
-    year, month, theme = challenge.split(" - ")
+def announce_challenge_winners(challenge_list: list):
+    challenge1, challenge2 = challenge_list
+    year, month, theme = challenge1.split(" - ")
     header = f"[[Commons:Photo challenge|Photo challenge]] {month} results"
-    text1  = f"{{{{Commons:Photo challenge/{challenge}/Winners}}}}" 
-    text2  = "Congratulations to [[User:{}|]], [[User:{}|]] and [[User:{}|]]. ".format(
-         file_df.iloc[0]["creator"], 
-         file_df.iloc[1]["creator"], 
-         file_df.iloc[2]["creator"])
+    text1  = f"{{{{Commons:Photo challenge/{challenge1}/Winners|height=240}}}}" 
+    text2  = f"{{{{Commons:Photo challenge/{challenge2}/Winners|height=240}}}}" 
+
+    file1_df = pd.read_csv(f"{challenge1}_files.csv")
+    file2_df = pd.read_csv(f"{challenge2}_files.csv")
+    users = [file1_df.iloc[0]["creator"], file1_df.iloc[1]["creator"], file1_df.iloc[2]["creator"],
+             file2_df.iloc[0]["creator"], file2_df.iloc[1]["creator"], file2_df.iloc[2]["creator"]]
+    users = [f"[[User:{u}|]]" for u in users]
+    text3 = "Congratulations to " + ", ".join(users[:-1]) + " and " + users[-1]
     
+    site      = pywikibot.Site("commons", "commons")  # Wikimedia Commons
     talk_page = pywikibot.Page(site, 'Commons:Photo challenge').toggleTalkPage()
     if not talk_page.exists():
         print('Talk page does not exist')
         return
 
-    talk_page.text += f"\n\n== {header} ==\n{text1}\n{text2}--~~~~"
+    talk_page.text += f"\n\n== {header} ==\n{text1}\n{text2}\n{text3}--~~~~"
     talk_page.save(summary="Announcing Photo Challenge winners")
-    
-#=====================================================================================
-def announce(file_df, file_name: str, challenge: str):
-    # text to be added to announcments
-    fp.write(f"== [[Commons:Photo challenge|Photo challenge]] {month} results ==\n")
-    fp.write("Congratulations to [[User:{}|]], [[User:{}|]] and [[User:{}|]]. -- ~~~~\n".format(
-         file_df.iloc[0]["creator"], 
-         file_df.iloc[1]["creator"], 
-         file_df.iloc[2]["creator"]))
 
-    # text for [[Commons:Photo challenge/Previous]]
-    part  = challenge.split(" - ")
-    year  = part[0]
-    month = datetime.datetime.strptime(part[1], "%B").strftime("%m")
-    header = '=== {{ucfirst:{{ISOdate|' + year + '-' + month + '|{{PAGELANGUAGE}}}}}} ==='
-    print(header)
-    print(f";* [[Commons:Photo challenge/{challenge}/Voting|{challenge}]] "
-          f"-> {{{{Commons:Photo challenge/{challenge}/Winners}}}}")
+#=====================================================================================
+def add_assesment_to_files(challenge_list: list):
+    site = pywikibot.Site("commons", "commons")  # Wikimedia Commons
+    header = "=={{Assessment}}==\n"
+    marker1 = "=={{int:license-header}}=="
+    marker2 = "|other versions=\n}}\n\n"
+    marker3 = "[[Category:"
+    for idx, challenge in enumerate(challenge_list):
+        year, month, theme = challenge.split(" - ")
+        file_df = pd.read_csv(f"{challenge}_files.csv")
+        for ifile in range(3):
+            file = 'File:' + file_df.iloc[ifile]["file_name"]
+            template = f"{{{{Photo challenge winner|{ifile+1}|{theme}|{year}|{month}}}}}\n\n" 
+            page = pywikibot.Page(site, file)
+            if not page.exists():
+                continue
+            text = page.text
+            if '{{Photo challenge winner' in text:
+                continue
+            if (marker1 in text):
+                before, after = text.split(marker1, 1)
+                page.text = before + header + template + marker1 + after
+            elif (marker2 in text):
+                before, after = text.split(marker2, 1)
+                page.text = before + marker2 + header + template + after
+            else:
+                before, after = text.split(marker3, 1)
+                page.text = before + header + template + marker3 + after
+                
+            page.save(summary="Assessment added - congratulations")
+            print('Adding assesment template to ' + file)
+
+#=====================================================================================
+def update_previous_page(challenge_list: list):
+    # text to be added to Photo Challenge talk page
+    challenge1, challenge2 = challenge_list
+    year, month_str, theme = challenge1.split(" - ")   
+    month  = datetime.datetime.strptime( month_str, "%B").strftime("%m")
+    header = f'{{{{ucfirst:{{{{ISOdate|{year}-{month}|{{{{PAGELANGUAGE}}}}}}}}}}}}'
+    text1  = f"{{{{Commons:Photo challenge/{challenge1}/Winners}}}}" 
+    text2  = f"{{{{Commons:Photo challenge/{challenge2}/Winners}}}}" 
+    
+    site = pywikibot.Site("commons", "commons")  # Wikimedia Commons
+    page = pywikibot.Page(site, 'Commons:Photo challenge/Previous')
+    if not page.exists():
+        print('Page does not exist')
+        return
+
+    page.text = f"=== {header} ===\n{text1}\n{text2}\n\n" + page.text
+    page.save(summary=f"Add {month_str} winners")
 
 #=====================================================================================
 def add_line_breaks(sentence: str, max_len: int):
@@ -782,3 +817,5 @@ def create_commons_page(challenge: str, subpage1: str, subpage2: str):
     target_page.text = source_text
     target_page.save(summary='Generated with photo_challeng_library.py')
     print(f'Created [{target_title}](https://commons.wikimedia.org/wiki/{target_title}')
+
+           
