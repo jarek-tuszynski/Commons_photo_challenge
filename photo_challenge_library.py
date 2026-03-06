@@ -231,7 +231,7 @@ def create_voting_page_from_submission_page(challenge: str):
 def get_new_text_of_voting_index(challenge_list: list):
     # Create new text for [[Commons:Photo challenge/Voting]]
     site  = pywikibot.Site("commons", "commons")  # Wikimedia Commons
-    year, month, theme = challenge.split(" - ")
+    year, month, theme = challenge_list[0].split(" - ")
     month  = datetime.datetime.strptime(month, "%B").strftime("%m")
     header = f'=== {{{{ucfirst:{{{{ISOdate|{year}-{month}|{{{{PAGELANGUAGE}}}}}}}}}}}} ==='
     print(header)
